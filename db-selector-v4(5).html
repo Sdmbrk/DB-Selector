@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DB Size Selector v3</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:14px;user-select:none}
+.app{display:grid;grid-template-columns:260px 1fr 290px;height:100vh;overflow:hidden}
+.sidebar{background:#fff;border-right:1px solid #e5e7eb;padding:7px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;height:100vh}
+.main{padding:8px;overflow:hidden;display:flex;flex-direction:column;gap:6px;height:100vh;background:#f0f2f5}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:11px}
+.ctitle{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px}
+h1{font-size:17px;font-weight:700;color:#1a1a2e}
+
+/* Phase toggle */
+.phase-bar{display:flex;gap:0;border:2px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:2px}
+.phase-btn{flex:1;padding:7px 4px;border:none;background:#f9fafb;cursor:pointer;font-size:11px;font-weight:700;color:#6b7280;transition:all .12s}
+.phase-btn.active-1ph{background:#f59e0b;color:#fff}
+.phase-btn.active-3ph{background:#1d4ed8;color:#fff}
+
+/* Cable toggle */
+.tog-row{display:flex;gap:5px}
+.tog-btn{flex:1;padding:5px;border-radius:6px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:10px;font-weight:600;color:#6b7280}
+.tog-btn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+
+/* Library */
+.lib-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.lib-item{border:1.5px solid #e5e7eb;border-radius:6px;padding:6px 4px;cursor:pointer;background:#f9fafb;text-align:center;transition:all .12s;position:relative}
+.lib-item:hover{border-color:#3b82f6;background:#eff6ff}
+.lib-item.disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+.lib-name{font-size:9px;font-weight:700;color:#1e40af;line-height:1.3}
+.lib-meta{font-size:8px;color:#6b7280;margin-top:1px}
+.lib-count{position:absolute;top:2px;right:4px;font-size:8px;font-weight:700;color:#1d4ed8;background:#dbeafe;border-radius:3px;padding:0 3px}
+.grp-lbl{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;margin-bottom:4px;display:inline-block}
+
+/* Summary */
+.sum-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;flex-shrink:0}
+.sum-stat{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:5px;text-align:center}
+.sum-val{font-size:16px;font-weight:700;color:#0369a1}
+.sum-lbl{font-size:8px;color:#0284c7;margin-top:1px}
+
+/* DB frame */
+.db-frame{border:2px solid #374151;border-radius:10px;overflow:hidden;background:#9ca3af;width:420px;flex-shrink:0}
+.db-row{display:flex;border-bottom:var(--row-gap,60px) solid #9ca3af;align-items:stretch;margin-bottom:0}
+.db-row:last-child{border-bottom:none}
+.row-lbl{width:46px;flex-shrink:0;border-right:1px solid #9ca3af;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#374151;background:#f3f4f6;padding:2px;text-align:center;gap:2px}
+.rtag{font-size:8px;padding:2px 4px;border-radius:3px;font-weight:700}
+.rtag-c{background:#fef3c7;color:#92400e}
+.rtag-i{background:#dbeafe;color:#1e40af}
+.rtag-l{background:#dcfce7;color:#166534}
+.rtag-r{background:#fee2e2;color:#b91c1c}
+/* Each module is exactly 1/16 of the rail width (16 modules per row) */
+.din{display:flex;flex:1;padding:4px 2px;gap:1px;align-items:stretch;min-width:0}
+
+/* Slots and modules: use flex:1 so 16 always fill the row */
+.mod-slot{flex:1;min-width:0;border-radius:3px;border:1px dashed #c8ccd0;background:#f0f2f5;height:160px;transition:border-color .1s;display:flex;align-items:center;justify-content:center}
+.mod-slot.drop-ok{border-color:#3b82f6;background:#eff6ff;border-style:solid}
+.mod-slot.drop-no{border-color:#ef4444;background:#fef2f2;border-style:solid}
+.mod-slot.reserved{background:#fee2e2;border-color:#fca5a5;cursor:not-allowed}
+
+.mod-placed{flex:1;min-width:0;border-radius:3px;height:160px;position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible;transition:box-shadow .1s}
+.mod-placed:hover{box-shadow:0 0 0 2px #facc15;z-index:5}
+.mod-placed.selected{box-shadow:0 0 0 2px #f59e0b;z-index:10}
+.mod-placed.dragging{opacity:.3}
+.mod-label{font-size:9px;font-weight:800;text-align:center;line-height:1.4;padding:3px 2px;position:relative;z-index:2;pointer-events:none;word-break:break-all;max-width:100%;overflow:hidden}
+.mod-bar{position:absolute;left:3px;right:3px;top:50%;height:2px;border-radius:1px;transform:translateY(-50%);opacity:.55;pointer-events:none;z-index:1}
+.mod-tick{position:absolute;width:2px;top:20%;height:60%;border-radius:1px;opacity:.65;pointer-events:none;z-index:1}
+.mod-x{position:absolute;top:-4px;right:-4px;width:12px;height:12px;border-radius:50%;background:#ef4444;color:#fff;font-size:7px;line-height:12px;text-align:center;cursor:pointer;z-index:20;display:none;border:1px solid #fff;font-weight:700}
+.mod-placed:hover .mod-x,.mod-placed.selected .mod-x{display:block}
+.mod-drag{position:absolute;bottom:1px;left:50%;transform:translateX(-50%);font-size:5px;color:rgba(0,0,0,.2);cursor:grab;z-index:20;display:none}
+.mod-placed:hover .mod-drag,.mod-placed.selected .mod-drag{display:block}
+.sec-div{width:2px;flex-shrink:0;border-radius:2px;margin:2px 0}
+.rpanel{background:#fff;border-left:1px solid #e5e7eb;padding:8px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;height:100vh}
+
+@media(max-width:900px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto auto auto;height:auto}
+  .sidebar{border-right:none;border-bottom:2px solid #e5e7eb;max-height:40vh;overflow-y:auto;height:auto}
+  .rpanel{border-left:none;border-top:2px solid #e5e7eb;height:auto;max-height:60vh}
+  .main{padding:8px}
+  .sum-bar{grid-template-columns:repeat(2,1fr)}
+  .row-lbl{width:38px;font-size:7px}
+  .mod-slot,.mod-placed{height:110px}
+  .mod-label{font-size:5.5px}
+  .din{padding:2px 1px;gap:1px}
+}
+
+/* Buttons */
+.btn{padding:5px 11px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:10px;font-weight:600;color:#374151}
+.btn:hover{background:#f3f4f6}
+.btn-primary{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+.btn-primary:hover{background:#1e40af}
+.btn-danger{background:#fef2f2;border-color:#fca5a5;color:#b91c1c}
+.btn-danger:hover{background:#fee2e2}
+.btn-warn{background:#fffbeb;border-color:#fcd34d;color:#92400e}
+
+/* Context toolbar */
+.ctx-bar{display:none;position:fixed;z-index:400;background:#1e293b;border-radius:7px;padding:4px 6px;gap:4px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.ctx-bar.open{display:flex}
+.ctx-btn{padding:3px 8px;border-radius:4px;border:none;background:transparent;color:#e2e8f0;cursor:pointer;font-size:9px;font-weight:600}
+.ctx-btn:hover{background:#334155}
+.ctx-btn.red{color:#f87171}
+.ctx-btn.red:hover{background:#450a0a}
+
+/* Modals */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:18px;width:340px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal h3{font-size:14px;font-weight:700;margin-bottom:12px;color:#1a1a2e}
+.field{margin-bottom:9px}
+.field label{font-size:10px;font-weight:600;color:#374151;display:block;margin-bottom:3px}
+.field input,.field select{width:100%;padding:6px 9px;border:1.5px solid #d1d5db;border-radius:6px;font-size:12px;color:#1a1a2e;background:#fff}
+.field input:focus,.field select:focus{outline:none;border-color:#3b82f6}
+.mfooter{display:flex;gap:7px;justify-content:space-between;margin-top:12px;align-items:center}
+.hint{font-size:8px;color:#6b7280;margin-top:2px}
+.preset-row{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
+.preset{padding:2px 6px;border-radius:3px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;font-size:9px;font-weight:600;color:#374151}
+.preset:hover{background:#eff6ff;border-color:#3b82f6}
+
+/* Sections */
+.sec-card{border-radius:7px;overflow:hidden;border:1px solid #e5e7eb;margin-bottom:6px}
+.sec-head{display:flex;align-items:center;gap:7px;padding:6px 9px;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+.sec-name{font-size:10px;font-weight:700;color:#1e40af;flex:1}
+.sec-body{padding:6px 9px;display:flex;flex-direction:column;gap:4px}
+.circ-row{display:flex;align-items:center;gap:4px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:4px;padding:3px 6px;flex-wrap:wrap}
+.ctag{font-size:7px;font-weight:700;padding:1px 3px;border-radius:2px}
+.tag-ac{background:#fce7f3;color:#9d174d}
+.tag-light{background:#fef9c3;color:#713f12}
+.tag-socket{background:#f0fdf4;color:#14532d}
+.tag-fan{background:#e0f2fe;color:#075985}
+.tag-swh{background:#fef3c7;color:#92400e}
+.tag-bp{background:#f3e8ff;color:#6b21a8}
+.tag-general{background:#f3f4f6;color:#374151}
+.btn-add-c{width:100%;padding:4px;border:1.5px dashed #93c5fd;border-radius:4px;background:#eff6ff;cursor:pointer;font-size:9px;color:#1d4ed8;font-weight:600;margin-top:2px}
+
+/* Phase indicator badge */
+.phase-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px}
+.badge-1ph{background:#fef3c7;color:#92400e}
+.badge-3ph{background:#dbeafe;color:#1e40af}
+
+/* DB upgrade toast */
+#dbToast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:#1e293b;color:#fff;padding:10px 20px;border-radius:10px;
+  font-size:12px;font-weight:600;z-index:500;transition:transform .3s ease,opacity .3s;
+  opacity:0;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+#dbToast.show{transform:translateX(-50%) translateY(0);opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+<!-- ═══ SIDEBAR ═══ -->
+<div class="sidebar">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h1>DB Selector <span id="phBadge" class="phase-badge badge-3ph">3-Phase</span></h1>
+    <span id="dbBadge" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:#dbeafe;color:#1e40af">3 Row</span>
+  </div>
+
+  <!-- Phase select -->
+  <div class="card">
+    <div class="ctitle">⚡ DB phase type</div>
+    <div class="phase-bar">
+      <button class="phase-btn active-3ph" id="btn3ph" onclick="setPhase(3)">3-Phase DB</button>
+      <button class="phase-btn" id="btn1ph" onclick="setPhase(1)">1-Phase DB</button>
+    </div>
+    <div id="phaseNote" style="font-size:9px;color:#6b7280;margin-top:5px;line-height:1.5"></div>
+  </div>
+
+  <!-- Cable direction -->
+  <div class="card">
+    <div class="ctitle">🔌 Cable entry + isolator</div>
+    <div class="tog-row" style="margin-bottom:6px">
+      <button class="tog-btn active" id="btnDown" onclick="setCable('down')">↓ Bottom</button>
+      <button class="tog-btn" id="btnUp" onclick="setCable('up')">↑ Top</button>
+    </div>
+    <div id="isoNote" style="font-size:9px;color:#6b7280;line-height:1.6;background:#f9fafb;padding:5px 7px;border-radius:5px;border-left:3px solid #3b82f6"></div>
+  </div>
+
+  <!-- Main Isolator -->
+  <div class="card">
+    <div class="ctitle">🔒 Main isolator</div>
+    <div class="lib-grid" id="libIso"></div>
+    <div style="font-size:8px;color:#6b7280;margin-top:5px;background:#fffbeb;padding:3px 6px;border-radius:4px;border-left:2px solid #fbbf24">Auto-places on ISO row. NT auto-added right of isolator.</div>
+  </div>
+
+  <!-- NT -->
+  <div class="card">
+    <div class="ctitle">⚪ Neutral terminal block</div>
+    <div id="libNt"></div>
+    <div style="font-size:8px;color:#6b7280;margin-top:4px">Added automatically when ISO placed. Add extras manually.</div>
+  </div>
+
+  <!-- ELCBs -->
+  <div class="card" id="elcbCard">
+    <div class="ctitle">🛡 ELCBs / RCCBs</div>
+    <div id="elcbLibWrap"></div>
+  </div>
+
+</div>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+  <div class="sum-bar">
+    <div class="sum-stat"><div class="sum-val" id="sTot">0</div><div class="sum-lbl">Modules used</div></div>
+    <div class="sum-stat"><div class="sum-val" id="sBest">—</div><div class="sum-lbl">Best DB</div></div>
+    <div class="sum-stat"><div class="sum-val" id="sFree">—</div><div class="sum-lbl">Free modules</div></div>
+    <div class="sum-stat"><div class="sum-val" id="sSec">0</div><div class="sum-lbl">Sections</div></div>
+  </div>
+
+  <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;flex-shrink:0">
+      <div class="ctitle" style="margin-bottom:0">🔲 DB Layout</div>
+      <div style="display:flex;gap:5px">
+        <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:9px;font-weight:600;color:#374151;white-space:nowrap">Row gap</label>
+        <input type="range" min="2" max="120" value="60" id="rowGapSlider"
+          oninput="setRowGap(this.value)"
+          style="width:90px;accent-color:#3b82f6;cursor:pointer"/>
+        <span id="rowGapVal" style="font-size:9px;font-weight:700;color:#1d4ed8;min-width:28px">60px</span>
+      </div>
+      <button class="btn btn-warn" style="font-size:9px" onclick="autoPlace()">⟳ Reset positions</button>
+      </div>
+    </div>
+    <div id="dbCanvas" style="flex-shrink:0;overflow:auto;flex:1"></div>
+    <div id="legend" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px"></div>
+  </div>
+
+</div>
+<div class="rpanel">
+<!-- AC Quick Add -->
+  <div class="card" style="border:1.5px solid #fce7f3">
+    <div class="ctitle" style="color:#9d174d">❄️ AC circuits (quick add)</div>
+    <div class="tog-row" style="margin-bottom:7px">
+      <button class="tog-btn active" id="acBtn1ph" onclick="setAcPhase(1)">1-Phase AC</button>
+      <button class="tog-btn" id="acBtn3ph" onclick="setAcPhase(3)">3-Phase AC</button>
+    </div>
+    <div class="field" style="margin-bottom:6px">
+      <label style="font-size:9px;font-weight:600;color:#374151;display:block;margin-bottom:3px">AC name</label>
+      <input id="acName" placeholder="e.g. AC Unit 1" style="width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:11px"/>
+    </div>
+    <div class="field" style="margin-bottom:6px">
+      <label style="font-size:9px;font-weight:600;color:#374151;display:block;margin-bottom:3px">MCB rating</label>
+      <select id="acRating" style="width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:11px">
+        <option>6A</option><option>10A</option><option>16A</option><option selected>20A</option><option>25A</option><option>32A</option><option>40A</option><option>63A</option>
+      </select>
+    </div>
+    <div id="acSecWrap" style="margin-bottom:6px">
+      <label style="font-size:9px;font-weight:600;color:#374151;display:block;margin-bottom:3px">Assign to section (optional)</label>
+      <select id="acSecSel" style="width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:11px"></select>
+    </div>
+    <button class="btn btn-primary" style="width:100%;font-size:10px" onclick="addAcGroup()">+ Add AC group (MCB+TMR+CTR)</button>
+    <div style="font-size:8px;color:#9ca3af;margin-top:4px">Placed right side of last load row. 1ph = 1P MCB+1ph TMR+1ph CTR | 3ph = 3P MCB+3ph TMR+3ph CTR</div>
+  </div>
+
+  <!-- General -->
+  <div class="card">
+    <div class="ctitle">📦 Components</div>
+    <div class="lib-grid" id="libGen"></div>
+    <button class="btn" style="width:100%;margin-top:6px;font-size:9px" onclick="openCustomModal()">+ Custom component</button>
+  </div>
+
+  <div style="font-size:8px;color:#9ca3af;line-height:1.8;padding:2px 0">
+    <b style="color:#6b7280">Controls:</b> Click = place · Click placed = select · Dbl-click = edit · Drag = move · ✕ = remove · ⟳ = reset positions
+  </div>
+
+<div class="card" style="flex-shrink:0">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div class="ctitle" style="margin-bottom:0">📋 Circuit sections</div>
+    <button class="btn btn-primary" style="font-size:9px;padding:3px 8px" onclick="openSecModal()">+ Add</button>
+  </div>
+  <div id="secList"><p style="font-size:10px;color:#9ca3af;text-align:center;padding:10px">Place an ELCB then add a section.</p></div>
+</div>
+</div>
+</div>
+
+<!-- Context toolbar -->
+<div class="ctx-bar" id="ctxBar">
+  <span id="ctxName" style="font-size:9px;color:#94a3b8;margin-right:3px;max-width:100px;overflow:hidden;white-space:nowrap"></span>
+  <button class="ctx-btn" onclick="ctxEdit()">✏ Edit</button>
+  <button class="ctx-btn" onclick="ctxMoveLeft()">← Move</button>
+  <button class="ctx-btn" onclick="ctxMoveRight()">Move →</button>
+  <button class="ctx-btn red" onclick="ctxRemove()">✕ Remove</button>
+  <button class="ctx-btn" style="color:#64748b" onclick="closeCtx()">✕</button>
+</div>
+
+<!-- Edit modal -->
+<div class="overlay" id="editModal">
+  <div class="modal">
+    <h3 id="editTitle">Edit module</h3>
+    <div class="field"><label>Label</label><input id="eLabel"/></div>
+    <div class="field"><label>Rating</label>
+      <input id="eRating"/>
+      <div class="preset-row" id="ePresets"></div>
+    </div>
+    <div class="field" id="eSensWrap" style="display:none"><label>ELCB sensitivity</label>
+      <select id="eSens"><option value="30mA">30mA (sockets/SWH/pump)</option><option value="100mA">100mA (lights/AC/fan)</option></select>
+    </div>
+    <div class="field" id="eSpanWrap" style="display:none"><label>Poles / span</label>
+      <select id="eSpan">
+        <option value="1">1 pole — 1 module</option>
+        <option value="2">2 poles — 2 modules</option>
+        <option value="3">3 poles — 3 modules</option>
+        <option value="4">4 poles — 4 modules</option>
+      </select>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-danger" onclick="ctxRemove();closeEditModal()">Remove</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="closeEditModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section modal -->
+<div class="overlay" id="secModal">
+  <div class="modal">
+    <h3>Add ELCB section</h3>
+    <div class="field"><label>ELCB (placed on board)</label><select id="secElcb"></select></div>
+    <div class="field"><label>Section name</label><input id="secName" placeholder="e.g. Floor 1 sockets"/></div>
+    <div class="mfooter"><div></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="closeSecModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="addSection()">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Circuit modal -->
+<div class="overlay" id="circModal">
+  <div class="modal">
+    <h3>Add circuit</h3>
+    <div class="field"><label>Type</label>
+      <select id="cType" onchange="onCType()">
+        <option value="ac">AC unit (MCB + Timer + Contactor)</option>
+        <option value="light">Lighting</option>
+        <option value="socket">Socket</option>
+        <option value="fan">Fan</option>
+        <option value="swh">Solar water heater</option>
+        <option value="bp">Booster pump</option>
+        <option value="general">General</option>
+      </select>
+      <div class="hint" id="cHint"></div>
+    </div>
+    <div class="field"><label>Name</label><input id="cName" placeholder="e.g. AC unit 1"/></div>
+    <div class="field"><label>MCB rating</label>
+      <select id="cRating"><option>6A</option><option>10A</option><option>16A</option><option selected>20A</option><option>25A</option><option>32A</option><option>40A</option><option>63A</option></select>
+    </div>
+    <div class="field" id="cPolesWrap"><label>MCB poles</label>
+      <select id="cPoles"><option value="1">1 pole</option><option value="3">3 poles</option></select>
+    </div>
+    <div id="cAcX">
+      <div class="field"><label>Timer</label>
+        <select id="cTimer"><option value="1ph">1-phase (1 mod)</option><option value="3ph">3-phase (1 mod)</option></select>
+      </div>
+      <div class="field"><label>Contactor</label>
+        <select id="cCont"><option value="1ph">1-phase (2 mod)</option><option value="3ph">3-phase (2 mod)</option></select>
+      </div>
+    </div>
+    <div class="mfooter"><div></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="closeCircModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCircuit()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Custom modal -->
+<div class="overlay" id="customModal">
+  <div class="modal">
+    <h3>Add custom component</h3>
+    <div class="field"><label>Name</label><input id="cusName" placeholder="2P RCCB"/></div>
+    <div class="field"><label>Module space</label><input id="cusSpace" type="number" min="1" max="16" value="2"/></div>
+    <div class="field"><label>Rating</label><input id="cusRating" placeholder="32A"/></div>
+    <div class="mfooter"><div></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="document.getElementById('customModal').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCustom()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ══════════════════════════════════════════════════════════════════════
+const DBs=[
+  {name:'3 Row',rows:3,mods:16,total:48},
+  {name:'4 Row',rows:4,mods:16,total:64},
+  {name:'5 Row',rows:5,mods:16,total:80},
+  {name:'6 Row',rows:6,mods:16,total:96}
+];
+const SEC_COLORS=['#2563eb','#16a34a','#dc2626','#d97706','#7c3aed','#0891b2','#db2777','#65a30d'];
+const C={
+  isolator:{bg:'#1d4ed8',brd:'#1e40af',txt:'#fff',ln:'#93c5fd'},
+  neutral: {bg:'#e2e8f0',brd:'#64748b',txt:'#1e293b',ln:'#64748b'},
+  elcb:    {bg:'#15803d',brd:'#166534',txt:'#fff',ln:'#86efac'},
+  breaker: {bg:'#dbeafe',brd:'#3b82f6',txt:'#1e40af',ln:'#3b82f6'},
+  timer:   {bg:'#ede9fe',brd:'#7c3aed',txt:'#4c1d95',ln:'#7c3aed'},
+  contactor:{bg:'#fce7f3',brd:'#db2777',txt:'#831843',ln:'#db2777'},
+  cable:   {bg:'#fef3c7',brd:'#d97706',txt:'#92400e',ln:'#d97706'},
+  empty:   {bg:'#f3f4f6',brd:'#d1d5db',txt:'#9ca3af',ln:'transparent'},
+  space:   {bg:'#f0fdf4',brd:'#86efac',txt:'#16a34a',ln:'#86efac'},
+  space:   {bg:'#f0fdf4',brd:'#86efac',txt:'#16a34a',ln:'#86efac'},
+  space:   {bg:'#f0fdf4',brd:'#86efac',txt:'#16a34a',ln:'#86efac'},
+  reserved:{bg:'#fee2e2',brd:'#fca5a5',txt:'#b91c1c',ln:'transparent'},
+};
+const CTYPE_LABELS={ac:'AC unit',light:'Lighting',fan:'Fan',socket:'Socket',swh:'SWH',bp:'Booster pump',general:'General'};
+const CTYPE_HINTS={ac:'MCB+Timer+Contactor. ELCB: 100mA.',light:'MCB only. ELCB: 100mA.',fan:'MCB only. ELCB: 100mA.',socket:'MCB only. ELCB: 30mA.',swh:'MCB only. ELCB: 30mA.',bp:'MCB only. ELCB: 30mA.',general:'MCB only.'};
+const CTYPE_TAGS={ac:'tag-ac',light:'tag-light',fan:'tag-fan',socket:'tag-socket',swh:'tag-swh',bp:'tag-bp',general:'tag-general'};
+
+// ══════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════
+let phase=3;         // 1 or 3
+let cableDir='down';
+let placedModules=[]; // {uid,libId,cls,label,rating,sensitivity,span,sectionId,autoNT}
+let manualPos={};     // uid -> startSlot (overrides auto)
+let sections=[];
+let customLibItems=[];
+let uidCtr=1,secCtr=1,circCtr=1,cusCtr=200;
+let selectedUid=null,dragUid=null,dragTargetSlot=null;
+let dbName='DB-GF FEED FROM MDB';
+let acPhase=1; // phase for quick AC add
+
+// ══════════════════════════════════════════════════════════════════════
+// LIBRARY DEFINITIONS (phase-aware, computed at render time)
+// ══════════════════════════════════════════════════════════════════════
+function getLIB(){
+  const is3=phase===3;
+  return [
+    // ISO — 3ph: 2P,3P,4P | 1ph: 2P only
+    ...(is3?[
+      {id:'iso4p',name:'4-pole isolator',space:4,cls:'isolator',rating:'63A',group:'iso',label:'ISO'},
+      {id:'iso3p',name:'3-pole isolator',space:3,cls:'isolator',rating:'63A',group:'iso',label:'ISO'},
+      {id:'iso2p',name:'2-pole isolator',space:2,cls:'isolator',rating:'63A',group:'iso',label:'ISO'},
+    ]:[
+      {id:'iso2p',name:'2-pole isolator',space:2,cls:'isolator',rating:'63A',group:'iso',label:'ISO'},
+    ]),
+    {id:'nt',name:'Neutral terminal',space:1,cls:'neutral',rating:'',group:'nt',label:'NT'},
+    // ELCBs — 3ph: all 4 types | 1ph: 1ph types only
+    ...(is3?[
+      {id:'elcb3_100',name:'3ph ELCB 100mA',space:4,cls:'elcb',rating:'63A',sensitivity:'100mA',group:'elcb3',label:'3P ELCB'},
+      {id:'elcb3_30', name:'3ph ELCB 30mA', space:4,cls:'elcb',rating:'63A',sensitivity:'30mA', group:'elcb3',label:'3P ELCB'},
+    ]:[]),
+    {id:'elcb1_100',name:'1ph ELCB 100mA',space:2,cls:'elcb',rating:'40A',sensitivity:'100mA',group:'elcb1',label:'2P ELCB'},
+    {id:'elcb1_30', name:'1ph ELCB 30mA', space:2,cls:'elcb',rating:'40A',sensitivity:'30mA', group:'elcb1',label:'2P ELCB'},
+    // MCBs
+    {id:'mcb1p',name:'1-pole MCB',space:1,cls:'breaker',rating:'16A',group:'gen',label:'1P MCB'},
+    ...(is3?[{id:'mcb3p',name:'3-pole MCB',space:3,cls:'breaker',rating:'32A',group:'gen',label:'3P MCB'}]:[]),
+    // Timers — both phases available but 3ph only in 3ph mode
+    {id:'tmr1',name:'1ph Timer',space:1,cls:'timer',rating:'',group:'gen',label:'TMR'},
+    ...(is3?[{id:'tmr3',name:'3ph Timer',space:1,cls:'timer',rating:'',group:'gen',label:'TMR'}]:[]),
+    // Contactors
+    {id:'ctr1',name:'1ph Contactor',space:2,cls:'contactor',rating:'',group:'gen',label:'CTR'},
+    ...(is3?[{id:'ctr3',name:'3ph Contactor',space:2,cls:'contactor',rating:'',group:'gen',label:'CTR'}]:[]),
+  ];
+}
+
+function libById(id){return[...getLIB(),...customLibItems].find(l=>l.id===id);}
+
+// ══════════════════════════════════════════════════════════════════════
+// PHASE + CABLE
+// ══════════════════════════════════════════════════════════════════════
+function setPhase(p){
+  phase=p;
+  // remove incompatible placed modules
+  const lib=getLIB();
+  const validIds=new Set(lib.map(l=>l.id));
+  placedModules=placedModules.filter(m=>{
+    if(customLibItems.find(c=>c.id===m.libId)) return true; // keep custom
+    return validIds.has(m.libId);
+  });
+  manualPos={};
+  document.getElementById('btn3ph').className='phase-btn'+(p===3?' active-3ph':'');
+  document.getElementById('btn1ph').className='phase-btn'+(p===1?' active-1ph':'');
+  document.getElementById('phBadge').textContent=p===3?'3-Phase':'1-Phase';
+  document.getElementById('phBadge').className='phase-badge '+(p===3?'badge-3ph':'badge-1ph');
+  document.getElementById('phaseNote').textContent=p===3
+    ?'3-phase mode: 3P/4P isolator, 3-phase ELCBs, 3P MCBs available.'
+    :'1-phase mode: 2P isolator only, 1-phase ELCBs only, 1P MCBs only.';
+  renderAll();
+}
+
+function setCable(d){
+  cableDir=d;
+  document.getElementById('btnDown').classList.toggle('active',d==='down');
+  document.getElementById('btnUp').classList.toggle('active',d==='up');
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DB / ROW LOGIC
+// ══════════════════════════════════════════════════════════════════════
+let _lastDBName=null;
+function pickDB(){
+  const used=placedModules.reduce((s,m)=>s+m.span,0);
+  // Upgrade threshold: move to next DB when free space < 7
+  const THRESHOLD=7;
+  // Find smallest DB where (total - used) >= THRESHOLD, or fallback to largest
+  let db=DBs.find(d=>d.total-used>=THRESHOLD);
+  if(!db) db=DBs[DBs.length-1]; // overflow — show largest
+  // Notify + reset ISO/NT positions when DB size changes
+  if(_lastDBName&&db.name!==_lastDBName){
+    // Clear manual positions for ISO and NT — they must snap to new isoRow
+    placedModules.filter(m=>m.cls==='isolator'||m.cls==='neutral').forEach(m=>{
+      delete manualPos[m.uid];
+    });
+    showDBToast(db.name, db.total-used);
+  }
+  _lastDBName=db.name;
+  return db;
+}
+function getRows(db){
+  let isoRow,cableRow;
+  if(cableDir==='down'){cableRow=db.rows-1;isoRow=db.rows-2;}
+  else{cableRow=0;isoRow=1;}
+  return{isoRow,cableRow};
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PLACE FROM LIBRARY
+// ══════════════════════════════════════════════════════════════════════
+function placeFromLib(libId){
+  const def=libById(libId);
+  if(!def) return;
+  const uid='m'+(uidCtr++);
+  placedModules.push({uid,libId,cls:def.cls,label:def.label,rating:def.rating||'',sensitivity:def.sensitivity||'',span:def.space,sectionId:null,autoNT:false});
+
+  // Auto-add NT when ISO placed (only 2-pole and 3-pole; 4-pole has built-in neutral)
+  if(def.cls==='isolator'&&def.space===2||def.cls==='isolator'&&def.space===3){
+    const ntUid='m'+(uidCtr++);
+    placedModules.push({uid:ntUid,libId:'nt',cls:'neutral',label:'NT',rating:'',sensitivity:'',span:1,sectionId:null,autoNT:true,parentIso:uid});
+  }
+  renderAll();
+}
+
+function removeMod(uid){
+  // if removing an iso that auto-created NT, remove that NT too
+  const mod=placedModules.find(m=>m.uid===uid);
+  if(mod&&mod.cls==='isolator'){
+    placedModules=placedModules.filter(m=>!(m.autoNT&&m.parentIso===uid));
+  }
+  delete manualPos[uid];
+  placedModules=placedModules.filter(m=>m.uid!==uid);
+  if(selectedUid===uid){selectedUid=null;document.getElementById('ctxBar').classList.remove('open');}
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// BUILD SLOT MAP
+// ISO row is HARD RESERVED — only ISO, NT, and ELCB (right-fill) go there.
+// No breakers/timers/contactors allowed on isoRow.
+// ══════════════════════════════════════════════════════════════════════
+function buildSlotMap(db){
+  const R=db.rows,M=db.mods,T=db.total;
+  const{isoRow,cableRow}=getRows(db);
+  const slotMap=new Array(T).fill(null);
+
+  function tryPlace(uid,start,span){
+    if(start<0||start+span>T) return false;
+    if(Math.floor(start/M)!==Math.floor((start+span-1)/M)) return false;
+    for(let i=0;i<span;i++) if(slotMap[start+i]!==null) return false;
+    for(let i=0;i<span;i++) slotMap[start+i]={uid,posInSpan:i};
+    return true;
+  }
+
+  // 1. Cable reserve — 4 slots on cableRow left
+  for(let i=0;i<4;i++) slotMap[cableRow*M+i]={uid:'__cable__',posInSpan:i};
+
+  // 2. ISO — always isoRow left corner (ignore manual pos for ISO)
+  const isoMods=placedModules.filter(m=>m.cls==='isolator');
+  let isoEndSlot=-1;
+  isoMods.forEach(m=>{
+    const base=isoRow*M;
+    if(tryPlace(m.uid,base,m.span)) isoEndSlot=base+m.span-1;
+  });
+
+  // 3. NT — always right of ISO on isoRow (position LOCKED to isoRow, never manual override)
+  const ntMods=placedModules.filter(m=>m.cls==='neutral');
+  let ntCursor=isoEndSlot>=0?isoEndSlot+1:isoRow*M;
+  ntMods.forEach(m=>{
+    tryPlace(m.uid,ntCursor,m.span);
+    ntCursor++;
+  });
+
+  // 4. ELCBs
+  // HARD RULE: ISO+NT reserved zone on isoRow is BLOCKED for ELCBs.
+  // Reserved = left N slots of isoRow: N=4 for 3-phase (3P/4P iso), N=3 for 1-phase (2P iso).
+  // This applies even if no ISO is placed yet — slots stay blocked.
+  const isoReserveSlots = phase===1 ? 3 : 4; // 1ph=2P iso(2)+NT(1)=3, 3ph=3P/4P iso+NT=4 min
+  // Mark reserved zone as sentinel so ELCB cursor always starts after it
+  const isoZoneEnd = isoRow*M + isoReserveSlots - 1; // last reserved slot index
+
+  const elcbMods=placedModules.filter(m=>m.cls==='elcb');
+
+  // isoRow cursor: starts AFTER the reserved zone (even if ISO not placed)
+  {
+    let cur=isoRow*M+isoReserveSlots; // skip reserved zone
+    while(cur<isoRow*M+M&&slotMap[cur]!==null)cur++;
+    var isoRowElcbStart=cur;
+  }
+
+  // Overflow row order: after isoRow is full
+  // RULE: Row 0 (index) = Row 1 displayed — NEVER allowed for ELCB auto-placement
+  // Bottom entry order: cableRow → rows descending from cableRow-1 toward row1, skip row0
+  // Top entry order:    cableRow → rows ascending from cableRow+1 toward second-last, skip last
+  function elcbOverflowRows(){
+    const rows=[];
+    if(cableDir==='down'){
+      // 1st: cableRow itself (right side after cable reserve still free)
+      rows.push(cableRow);
+      // 2nd+: rows descending from cableRow-1 toward row1, never row0
+      for(let r=cableRow-1;r>=1;r--){
+        if(r===isoRow) continue;
+        rows.push(r);
+      }
+      // row0 never added
+      return rows;
+    } else {
+      // top entry: cableRow=0, isoRow=1
+      // 1st: cableRow (right side after cable reserve)
+      rows.push(cableRow);
+      // 2nd+: rows ascending from isoRow+1 toward R-2, never last row (R-1)
+      for(let r=isoRow+1;r<=R-2;r++){
+        rows.push(r);
+      }
+      return [...nonLast,...lastRow];
+    }
+  }
+  const elcbOvfRows=elcbOverflowRows();
+
+  elcbMods.forEach(m=>{
+    const mp=manualPos[m.uid];
+    if(mp!==undefined&&tryPlace(m.uid,mp,m.span)) return;
+
+    // Try isoRow L→R — col must be >= isoReserveSlots (never encroach on ISO zone)
+    let placed=false;
+    const startCol=Math.max(isoRowElcbStart-isoRow*M, isoReserveSlots);
+    for(let col=startCol;col<=M-m.span;col++){
+      if(tryPlace(m.uid,isoRow*M+col,m.span)){
+        isoRowElcbStart=isoRow*M+col+m.span;
+        placed=true;break;
+      }
+    }
+    if(placed) return;
+
+    // isoRow full — spill to overflow rows, right-side fill
+    for(const row of elcbOvfRows){
+      for(let col=M-m.span;col>=0;col--){
+        if(tryPlace(m.uid,row*M+col,m.span)){placed=true;break;}
+      }
+      if(placed) break;
+    }
+  });
+
+  // 5. Circuit modules — load rows only (not cableRow, not isoRow)
+  function loadRows(){
+    const rows=[];
+    for(let r=0;r<R;r++) if(r!==cableRow&&r!==isoRow) rows.push(r);
+    return rows;
+  }
+  const lRows=loadRows();
+
+  // ── 5a. AC groups — place RIGHT side, last load row first then 2nd-last ──
+  // Collect distinct AC group tags in order of first appearance
+  const acGroupTags=[...new Set(
+    placedModules.filter(m=>m.acGroup).map(m=>m.acGroup)
+  )];
+  // AC row order: last load row first, then second-last, etc.
+  const acRowOrder=[...lRows].reverse();
+
+  // For each AC group, reserve slots right-side on a row
+  acGroupTags.forEach(tag=>{
+    const grpMods=placedModules.filter(m=>m.acGroup===tag);
+    const totalSpan=grpMods.reduce((s,m)=>s+m.span,0);
+    // try manual pos first for lead mod
+    const lead=grpMods[0];
+    if(lead&&manualPos[lead.uid]!==undefined){
+      let cur=manualPos[lead.uid];
+      let ok=true;
+      for(const m of grpMods){
+        if(!tryPlace(m.uid,cur,m.span)){ok=false;break;}
+        cur+=m.span;
+      }
+      if(ok) return;
+    }
+    // auto: find rightmost contiguous block of totalSpan on AC rows
+    for(const row of acRowOrder){
+      let placed=false;
+      for(let col=M-totalSpan;col>=0;col--){
+        let ok=true;
+        for(let s=0;s<totalSpan;s++) if(slotMap[row*M+col+s]!==null){ok=false;break;}
+        if(ok){
+          let cur=row*M+col;
+          for(const m of grpMods){tryPlace(m.uid,cur,m.span);cur+=m.span;}
+          placed=true;break;
+        }
+      }
+      if(placed) break;
+    }
+  });
+
+  // ── 5b. Non-AC circuit modules — left-to-right on load rows ──
+  const freeLoad=[];
+  lRows.forEach(row=>{for(let m=0;m<M;m++){const i=row*M+m;if(slotMap[i]===null)freeLoad.push(i);}});
+
+  const circMods=placedModules.filter(m=>m.sectionId&&m.cls!=='elcb'&&!m.acGroup);
+  let fi=0;
+  const adv=()=>{while(fi<freeLoad.length&&slotMap[freeLoad[fi]]!==null)fi++;};
+  adv();
+  circMods.forEach(m=>{
+    const mp=manualPos[m.uid];
+    const mpRow=mp!==undefined?Math.floor(mp/M):-1;
+    if(mp!==undefined&&mpRow!==cableRow&&mpRow!==isoRow&&tryPlace(m.uid,mp,m.span)) return;
+    while(fi<freeLoad.length){
+      const s=freeLoad[fi];
+      const row=Math.floor(s/M);
+      let ok=s+m.span<=T&&Math.floor((s+m.span-1)/M)===row;
+      if(ok) for(let i=0;i<m.span;i++) if(slotMap[s+i]!==null){ok=false;break;}
+      if(ok){tryPlace(m.uid,s,m.span);fi+=m.span;adv();break;}
+      else{fi++;adv();}
+    }
+  });
+
+  // 6. Free general mods — any remaining slots (load rows preferred)
+  const freeMods=placedModules.filter(m=>!m.sectionId&&m.cls!=='isolator'&&m.cls!=='neutral'&&m.cls!=='elcb');
+  // free slots on load rows first, then isoRow remaining, never cableRow if possible
+  const allFreeSlots=[];
+  lRows.forEach(row=>{for(let m=0;m<M;m++){const i=row*M+m;if(slotMap[i]===null)allFreeSlots.push(i);}});
+  // add isoRow remaining
+  for(let m=0;m<M;m++){const i=isoRow*M+m;if(slotMap[i]===null)allFreeSlots.push(i);}
+  let af=0;
+  const advA=()=>{while(af<allFreeSlots.length&&slotMap[allFreeSlots[af]]!==null)af++;};
+  advA();
+  freeMods.forEach(m=>{
+    const mp=manualPos[m.uid];
+    const mpRow=mp!==undefined?Math.floor(mp/M):-1;
+    if(mp!==undefined&&mpRow!==cableRow&&tryPlace(m.uid,mp,m.span)) return;
+    while(af<allFreeSlots.length){
+      const s=allFreeSlots[af];
+      const row=Math.floor(s/M);
+      let ok=s+m.span<=T&&Math.floor((s+m.span-1)/M)===row;
+      if(ok) for(let i=0;i<m.span;i++) if(slotMap[s+i]!==null){ok=false;break;}
+      if(ok){tryPlace(m.uid,s,m.span);af+=m.span;advA();break;}
+      else{af++;advA();}
+    }
+  });
+
+  return{slotMap,isoRow,cableRow};
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// RENDER DB
+// ══════════════════════════════════════════════════════════════════════
+function renderDB(){
+  const db=pickDB();
+  const{slotMap,isoRow,cableRow}=buildSlotMap(db);
+  const R=db.rows,M=db.mods;
+  const dbTitle=dbName;
+  let html='<div class="db-frame">'
+    +'<div style="background:#374151;padding:5px 10px;text-align:center;border-bottom:2px solid #4b5563;position:relative">'
+    +'<input id="dbNameInput" value="'+dbTitle+'" '
+    +'oninput="dbName=this.value" '
+    +'style="background:transparent;border:none;color:#f1f5f9;font-size:13px;font-weight:700;text-align:center;width:80%;outline:none;letter-spacing:.04em;font-family:inherit;cursor:text" '
+    +'title="Click to edit DB name"/>'
+    +'</div>';
+
+  for(let r=0;r<R;r++){
+    const isIsoRow=r===isoRow;
+    const isCableRow=r===cableRow;
+    let rtag='';
+    if(isCableRow) rtag=`<span class="rtag rtag-c">${cableDir==='down'?'↓Cable':'↑Cable'}</span>`;
+    else if(isIsoRow) rtag='<span class="rtag rtag-i">ISO+NT</span>';
+    else rtag='<span class="rtag rtag-l">Load</span>';
+
+    html+=`<div class="db-row"><div class="row-lbl">Row ${r+1}${rtag}</div><div class="din">`;
+
+    let mi=0;
+    let prevSec=null;
+    const rowSlots=[];
+    for(let m=0;m<M;m++) rowSlots.push(slotMap[r*M+m]);
+
+    while(mi<M){
+      const s=rowSlots[mi];
+      const slotIdx=r*M+mi;
+
+      if(!s){
+        // Determine if this empty slot is on the ISO row (reserved for nothing — show as reserved)
+        const isReservedRow=isIsoRow;
+        if(isReservedRow){
+          html+=`<div class="mod-slot reserved" title="ISO row — reserved" ondragover="onDragOver(event,${slotIdx},
+    {id:'space1',name:'Space (blank)',space:1,cls:'space',rating:'',group:'gen',label:'SPACE'},'iso')" ondrop="onDrop(event,${slotIdx})" ondragleave="onDragLeave(event)"><span style="font-size:6px;color:#b91c1c;opacity:.5">●</span></div>`;
+        } else {
+          html+=`<div class="mod-slot" ondragover="onDragOver(event,${slotIdx},'load')" ondrop="onDrop(event,${slotIdx})" ondragleave="onDragLeave(event)"></div>`;
+        }
+        mi++;
+      } else if(s.uid==='__cable__'){
+        if(s.posInSpan===0){
+          let span=1;
+          while(mi+span<M&&rowSlots[mi+span]&&rowSlots[mi+span].uid==='__cable__') span++;
+          // Cable wires: 3ph = R,Y,B,N(black) | 1ph = one phase colour + N(black)
+          const wires3ph=[
+            {clr:'#ef4444',lbl:'R'},  // Red
+            {clr:'#eab308',lbl:'Y'},  // Yellow
+            {clr:'#3b82f6',lbl:'B'},  // Blue
+            {clr:'#1e293b',lbl:'N'},  // Black neutral
+          ];
+          const ph1colour='#ef4444'; // Red for 1-phase line
+          const wires1ph=[
+            {clr:ph1colour,lbl:'L'},
+            {clr:'#1e293b',lbl:'N'},
+          ];
+          const wires=phase===3?wires3ph:wires1ph;
+          const arrow=cableDir==='down'?'↓':'↑';
+          html+=`<div class="mod-placed" style="flex:${span};background:#fffbeb;border:2px solid #d97706;pointer-events:none;flex-direction:column;justify-content:flex-end;padding:4px 3px;gap:2px;overflow:hidden">`;
+          html+=`<div style="display:flex;gap:2px;justify-content:center;align-items:flex-end;flex:1;padding-bottom:2px">`;
+          wires.forEach(w=>{
+            html+=`<div style="width:5px;flex-shrink:0;background:${w.clr};border-radius:3px 3px 0 0;height:70%;min-height:30px;display:flex;align-items:flex-start;justify-content:center;padding-top:2px">
+              <span style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6px;font-weight:800;color:#fff;opacity:.9;letter-spacing:1px">${w.lbl}</span>
+            </div>`;
+          });
+          html+=`</div>`;
+          html+=`<div style="text-align:center;font-size:7px;font-weight:700;color:#92400e;line-height:1.2">CABLE<br><span style="font-size:6px">${arrow} entry</span></div>`;
+          html+=`</div>`;
+          mi+=span;
+        } else mi++;
+      } else if(s.posInSpan===0){
+        const uid=s.uid;
+        const mod=placedModules.find(m=>m.uid===uid);
+        if(!mod){mi++;continue;}
+        if(mod.sectionId&&mod.sectionId!==prevSec&&prevSec!==null){
+          const sec=sections.find(s=>s.id===mod.sectionId);
+          if(sec) html+=`<div class="sec-div" style="background:${sec.color}" title="${sec.name}"></div>`;
+        }
+        prevSec=mod.sectionId||prevSec;
+        const col=C[mod.cls]||C.breaker;
+        const span=mod.span;
+        const sel=selectedUid===uid;
+        html+=`<div class="mod-placed${sel?' selected':''}${dragUid===uid?' dragging':''}"
+          style="flex:${span};background:${col.bg};border:2px solid ${col.brd}"
+          data-uid="${uid}" draggable="true"
+          ondragstart="onDragStart(event,'${uid}')"
+          ondragend="onDragEnd(event)"
+          onclick="selectMod(event,'${uid}')"
+          ondblclick="openEditFromMod('${uid}')"
+          title="${mod.label} ${mod.rating} ${mod.sensitivity} — dbl-click to edit">`;
+        if(span>1){
+          html+=`<div class="mod-bar" style="background:${col.ln}"></div>`;
+          for(let p=0;p<span;p++){
+            const pct=(p/(span-1||1))*100;
+            const off=p===0?'4px':p===span-1?'-4px':'0px';
+            html+=`<div class="mod-tick" style="left:calc(${pct}% - 1px + ${off});background:${col.ln}"></div>`;
+          }
+        }
+        if(mod.cls==='space'){
+          html+='<span style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:10px;font-weight:800;color:#16a34a;letter-spacing:3px;opacity:.8;pointer-events:none">SPACE</span>';
+        }else{
+          html+=`<span class="mod-label" style="color:${col.txt}">${mod.label}`;
+        const subParts=[mod.rating,mod.sensitivity].filter(Boolean);
+        if(mod.acName) subParts.push(mod.acName.slice(0,8));
+        if(subParts.length) html+=`<br><span style="font-size:6px;opacity:.85">${subParts.join(' ')}</span>`;
+        html+=`</span>`;
+        }
+        html+=`<div class="mod-x" onclick="event.stopPropagation();removeMod('${uid}')">✕</div>`;
+        html+=`<div class="mod-drag">⠿⠿</div>`;
+        html+=`</div>`;
+        mi+=span;
+      } else {
+        mi++;
+      }
+    }
+    html+=`</div></div>`;
+  }
+  html+='</div>';
+  const used=placedModules.reduce((s,m)=>s+m.span,0);
+  if(used>db.total) html+=`<div style="margin-top:6px;font-size:9px;color:#b91c1c;font-weight:700">⚠ ${used-db.total} modules overflow — DB too small.</div>`;
+  document.getElementById('dbCanvas').innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DRAG & DROP
+// ══════════════════════════════════════════════════════════════════════
+function onDragStart(e,uid){
+  dragUid=uid;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',uid);
+  setTimeout(()=>renderDB(),0);
+}
+function onDragEnd(e){
+  dragUid=null;dragTargetSlot=null;
+  document.querySelectorAll('.drop-ok,.drop-no').forEach(el=>{el.classList.remove('drop-ok','drop-no');});
+  renderDB();
+}
+function onDragOver(e,slotIdx,zone){
+  e.preventDefault();
+  if(!dragUid) return;
+  const mod=placedModules.find(m=>m.uid===dragUid);
+  if(!mod) return;
+  const db=pickDB();
+  const M=db.mods;
+  const{isoRow,cableRow}=getRows(db);
+  const targetRow=Math.floor(slotIdx/M);
+  // ISO/NT/ELCB can go on isoRow; breakers/timers/contactors cannot
+  const isRestricted=['breaker','timer','contactor'].includes(mod.cls);
+  if(isRestricted&&targetRow===isoRow){e.currentTarget.classList.add('drop-no');dragTargetSlot=null;return;}
+  if(targetRow===cableRow){e.currentTarget.classList.add('drop-no');dragTargetSlot=null;return;}
+  // Block ELCB from being dragged into ISO reserved zone on isoRow
+  const _isoReserve=phase===1?3:4;
+  if(mod.cls==='elcb'&&targetRow===isoRow&&slotIdx%db.mods<_isoReserve){
+    e.currentTarget.classList.add('drop-no');dragTargetSlot=null;return;
+  }
+  // check span fits
+  let ok=slotIdx+mod.span<=db.total&&Math.floor((slotIdx+mod.span-1)/M)===targetRow;
+  e.currentTarget.classList.add(ok?'drop-ok':'drop-no');
+  dragTargetSlot=ok?slotIdx:null;
+}
+function onDragLeave(e){e.currentTarget.classList.remove('drop-ok','drop-no');}
+function onDrop(e,slotIdx){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drop-ok','drop-no');
+  if(!dragUid||dragTargetSlot===null) return;
+  manualPos[dragUid]=dragTargetSlot;
+  dragUid=null;dragTargetSlot=null;
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SELECT + CONTEXT BAR
+// ══════════════════════════════════════════════════════════════════════
+function selectMod(e,uid){
+  e.stopPropagation();
+  selectedUid=(selectedUid===uid)?null:uid;
+  renderDB();
+  const bar=document.getElementById('ctxBar');
+  if(selectedUid){
+    const mod=placedModules.find(m=>m.uid===uid);
+    document.getElementById('ctxName').textContent=mod?(mod.label+(mod.rating?' '+mod.rating:'')).slice(0,18):'';
+    const rect=e.currentTarget.getBoundingClientRect();
+    bar.style.top=Math.min(rect.bottom+6,window.innerHeight-50)+'px';
+    bar.style.left=Math.min(rect.left,window.innerWidth-280)+'px';
+    bar.classList.add('open');
+  } else {
+    bar.classList.remove('open');
+  }
+}
+function closeCtx(){
+  document.getElementById('ctxBar').classList.remove('open');
+  selectedUid=null;renderDB();
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.mod-placed')&&!e.target.closest('#ctxBar')&&!e.target.closest('.overlay'))closeCtx();
+});
+function ctxEdit(){openEditFromMod(selectedUid);}
+function ctxRemove(){if(selectedUid)removeMod(selectedUid);closeCtx();}
+function ctxMoveLeft(){moveModBy(selectedUid,-1);}
+function ctxMoveRight(){moveModBy(selectedUid,1);}
+function moveModBy(uid,delta){
+  if(!uid) return;
+  const db=pickDB();
+  const M=db.mods;
+  const{slotMap}=buildSlotMap(db);
+  let cur=-1;
+  for(let i=0;i<db.total;i++) if(slotMap[i]&&slotMap[i].uid===uid&&slotMap[i].posInSpan===0){cur=i;break;}
+  if(cur===-1) return;
+  const mod=placedModules.find(m=>m.uid===uid);
+  if(!mod) return;
+  const target=cur+delta;
+  if(target<0||target+mod.span>db.total||Math.floor(target/M)!==Math.floor(cur/M)) return;
+  manualPos[uid]=target;
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// EDIT MODAL
+// ══════════════════════════════════════════════════════════════════════
+let editingUid=null;
+function openEditFromMod(uid){
+  const mod=placedModules.find(m=>m.uid===uid);
+  if(!mod) return;
+  editingUid=uid;
+  document.getElementById('editTitle').textContent='Edit — '+mod.label;
+  document.getElementById('eLabel').value=mod.label;
+  document.getElementById('eRating').value=mod.rating||'';
+  document.getElementById('eSens').value=mod.sensitivity||'100mA';
+  document.getElementById('eSensWrap').style.display=mod.cls==='elcb'?'block':'none';
+  const canSpan=['breaker','elcb','contactor','isolator'].includes(mod.cls);
+  document.getElementById('eSpanWrap').style.display=canSpan?'block':'none';
+  document.getElementById('eSpan').value=mod.span;
+  const presets=mod.cls==='elcb'||mod.cls==='isolator'?['25A','32A','40A','63A','100A']:['6A','10A','16A','20A','25A','32A','40A','63A'];
+  document.getElementById('ePresets').innerHTML=presets.map(p=>`<button class="preset" onclick="document.getElementById('eRating').value='${p}'">${p}</button>`).join('');
+  document.getElementById('editModal').classList.add('open');
+}
+function closeEditModal(){document.getElementById('editModal').classList.remove('open');editingUid=null;}
+function saveEdit(){
+  if(!editingUid) return;
+  const mod=placedModules.find(m=>m.uid===editingUid);
+  if(!mod) return;
+  mod.label=document.getElementById('eLabel').value.trim()||mod.label;
+  mod.rating=document.getElementById('eRating').value.trim();
+  if(mod.cls==='elcb') mod.sensitivity=document.getElementById('eSens').value;
+  if(['breaker','elcb','contactor','isolator'].includes(mod.cls)){
+    const ns=parseInt(document.getElementById('eSpan').value)||mod.span;
+    if(ns!==mod.span){mod.span=ns;delete manualPos[editingUid];}
+  }
+  closeEditModal();renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SECTIONS + CIRCUITS
+// ══════════════════════════════════════════════════════════════════════
+function openSecModal(){
+  const elcbs=placedModules.filter(m=>m.cls==='elcb');
+  if(!elcbs.length){alert('Place an ELCB on the board first.');return;}
+  document.getElementById('secElcb').innerHTML=elcbs.map(m=>`<option value="${m.uid}">${m.label} ${m.rating} ${m.sensitivity}</option>`).join('');
+  document.getElementById('secName').value='';
+  document.getElementById('secModal').classList.add('open');
+}
+function closeSecModal(){document.getElementById('secModal').classList.remove('open');}
+function addSection(){
+  const eu=document.getElementById('secElcb').value;
+  const name=document.getElementById('secName').value.trim()||('Section '+(sections.length+1));
+  sections.push({id:'s'+(secCtr++),name,elcbUid:eu,color:SEC_COLORS[sections.length%SEC_COLORS.length],circuits:[]});
+  closeSecModal();renderAll();
+}
+function removeSection(id){
+  placedModules=placedModules.filter(m=>m.sectionId!==id);
+  sections=sections.filter(s=>s.id!==id);
+  renderAll();
+}
+
+let addToSec=null;
+function openCircModal(secId){
+  addToSec=secId;
+  document.getElementById('cType').value='ac';
+  document.getElementById('cName').value='';
+  // 1ph mode: force 1 pole, hide 3ph options
+  if(phase===1){
+    document.getElementById('cPoles').innerHTML='<option value="1">1 pole</option>';
+    document.getElementById('cTimer').innerHTML='<option value="1ph">1-phase timer (1 mod)</option>';
+    document.getElementById('cCont').innerHTML='<option value="1ph">1-phase contactor (2 mod)</option>';
+  } else {
+    document.getElementById('cPoles').innerHTML='<option value="1">1 pole</option><option value="3">3 poles</option>';
+    document.getElementById('cTimer').innerHTML='<option value="1ph">1-phase (1 mod)</option><option value="3ph">3-phase (1 mod)</option>';
+    document.getElementById('cCont').innerHTML='<option value="1ph">1-phase (2 mod)</option><option value="3ph">3-phase (2 mod)</option>';
+  }
+  onCType();
+  document.getElementById('circModal').classList.add('open');
+}
+function closeCircModal(){document.getElementById('circModal').classList.remove('open');addToSec=null;}
+function onCType(){
+  const t=document.getElementById('cType').value;
+  document.getElementById('cHint').textContent=CTYPE_HINTS[t]||'';
+  document.getElementById('cAcX').style.display=t==='ac'?'block':'none';
+}
+function saveCircuit(){
+  const sec=sections.find(s=>s.id===addToSec);if(!sec)return;
+  const type=document.getElementById('cType').value;
+  const name=document.getElementById('cName').value.trim()||(CTYPE_LABELS[type]);
+  const rating=document.getElementById('cRating').value;
+  const poles=parseInt(document.getElementById('cPoles').value);
+  const isAC=type==='ac';
+  const cid='c'+(circCtr++);
+  sec.circuits.push({id:cid,type,name,rating,poles,hasTimer:isAC,hasCont:isAC});
+  // Place MCB
+  const mcbUid='m'+(uidCtr++);
+  placedModules.push({uid:mcbUid,libId:poles===3?'mcb3p':'mcb1p',cls:'breaker',label:poles===3?'3P MCB':'1P MCB',rating,sensitivity:'',span:poles===3?3:1,sectionId:sec.id,autoNT:false});
+  if(isAC){
+    const tUid='m'+(uidCtr++);
+    placedModules.push({uid:tUid,libId:'tmr1',cls:'timer',label:'TMR',rating:'',sensitivity:'',span:1,sectionId:sec.id,autoNT:false});
+    const cUid='m'+(uidCtr++);
+    placedModules.push({uid:cUid,libId:'ctr1',cls:'contactor',label:'CTR',rating:'',sensitivity:'',span:2,sectionId:sec.id,autoNT:false});
+  }
+  closeCircModal();renderAll();
+}
+function removeCircuit(secId,cid){
+  const sec=sections.find(s=>s.id===secId);if(!sec)return;
+  const circ=sec.circuits.find(c=>c.id===cid);if(!circ)return;
+  const secMods=placedModules.filter(m=>m.sectionId===secId);
+  const toRemove=(circ.poles===3?3:1)+(circ.hasTimer?1:0)+(circ.hasCont?2:0);
+  let rem=toRemove;
+  for(let i=secMods.length-1;i>=0&&rem>0;i--){placedModules=placedModules.filter(m=>m.uid!==secMods[i].uid);rem--;}
+  sec.circuits=sec.circuits.filter(c=>c.id!==cid);
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// CUSTOM COMPONENT
+// ══════════════════════════════════════════════════════════════════════
+function openCustomModal(){document.getElementById('customModal').classList.add('open');}
+function saveCustom(){
+  const name=document.getElementById('cusName').value.trim();
+  const space=parseInt(document.getElementById('cusSpace').value)||1;
+  const rating=document.getElementById('cusRating').value.trim();
+  if(!name)return;
+  const id='cus_'+(cusCtr++);
+  customLibItems.push({id,name,space,cls:'breaker',rating,group:'gen',label:name.split(' ').map(w=>w[0]).join('').slice(0,5).toUpperCase()});
+  document.getElementById('customModal').classList.remove('open');
+  renderAll();
+}
+
+function setAcPhase(p){
+  acPhase=p;
+  document.getElementById('acBtn1ph').classList.toggle('active',p===1);
+  document.getElementById('acBtn3ph').classList.toggle('active',p===3);
+}
+
+function addAcGroup(){
+  const name=document.getElementById('acName').value.trim()||('AC '+(uidCtr));
+  const rating=document.getElementById('acRating').value;
+  const is3=acPhase===3;
+  const secId=document.getElementById('acSecSel').value||null;
+  const groupTag='acg_'+(uidCtr);
+
+  // MCB
+  const mcbSpan=is3?3:1;
+  const mcbUid='m'+(uidCtr++);
+  placedModules.push({uid:mcbUid,libId:is3?'mcb3p':'mcb1p',cls:'breaker',
+    label:is3?'3P MCB':'1P MCB',rating,sensitivity:'',span:mcbSpan,
+    sectionId:secId,autoNT:false,acGroup:groupTag,acName:name});
+  // Timer
+  const tmrUid='m'+(uidCtr++);
+  placedModules.push({uid:tmrUid,libId:is3?'tmr3':'tmr1',cls:'timer',
+    label:is3?'3P TMR':'TMR',rating:'',sensitivity:'',span:1,
+    sectionId:secId,autoNT:false,acGroup:groupTag,acName:name});
+  // Contactor
+  const ctrUid='m'+(uidCtr++);
+  placedModules.push({uid:ctrUid,libId:is3?'ctr3':'ctr1',cls:'contactor',
+    label:is3?'3P CTR':'CTR',rating:'',sensitivity:'',span:2,
+    sectionId:secId,autoNT:false,acGroup:groupTag,acName:name});
+
+  // Modules placed directly above — no duplicate sec.circuits entry needed
+
+  document.getElementById('acName').value='';
+  renderAll();
+}
+
+function updateAcSecList(){
+  const sel=document.getElementById('acSecSel');
+  if(!sel) return;
+  sel.innerHTML='<option value="">— no section —</option>'+
+    sections.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+function setRowGap(v){
+  document.documentElement.style.setProperty('--row-gap', v+'px');
+  document.getElementById('rowGapVal').textContent=v+'px';
+}
+
+function showDBToast(name, free){
+  const t=document.getElementById('dbToast');
+  t.textContent=`⬆ DB upgraded to ${name} — ${free} modules free`;
+  t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function autoPlace(){manualPos={};renderAll();}
+
+// ══════════════════════════════════════════════════════════════════════
+// RENDER LIBRARY
+// ══════════════════════════════════════════════════════════════════════
+function libCard(def){
+  const cnt=placedModules.filter(m=>m.libId===def.id&&!m.autoNT).length;
+  return`<div class="lib-item" onclick="placeFromLib('${def.id}')" title="Click to place">
+    <div class="lib-name">${def.name}</div>
+    <div class="lib-meta">${def.space} mod${def.rating?' · '+def.rating:''}${def.sensitivity?' · '+def.sensitivity:''}</div>
+    ${cnt?`<div class="lib-count">${cnt}</div>`:''}
+  </div>`;
+}
+function renderLib(){
+  const lib=getLIB();
+  document.getElementById('libIso').innerHTML=lib.filter(l=>l.group==='iso').map(libCard).join('');
+  document.getElementById('libNt').innerHTML=`<div style="display:grid;grid-template-columns:1fr">${lib.filter(l=>l.group==='nt').map(libCard).join('')}</div>`;
+  // ELCBs
+  const e3=lib.filter(l=>l.group==='elcb3');
+  const e1=lib.filter(l=>l.group==='elcb1');
+  let elcbHtml='';
+  if(e3.length){
+    elcbHtml+=`<div class="grp-lbl" style="background:#fef3c7;color:#92400e">3-phase ELCBs</div>
+    <div class="lib-grid" style="margin-bottom:7px">${e3.map(libCard).join('')}</div>`;
+  }
+  elcbHtml+=`<div class="grp-lbl" style="background:#dbeafe;color:#1e40af">1-phase ELCBs</div>
+    <div class="lib-grid">${e1.map(libCard).join('')}</div>`;
+  document.getElementById('elcbLibWrap').innerHTML=elcbHtml;
+  document.getElementById('libGen').innerHTML=
+    lib.filter(l=>l.group==='gen').map(libCard).join('')+
+    customLibItems.map(libCard).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// RENDER SECTIONS
+// ══════════════════════════════════════════════════════════════════════
+function renderSections(){
+  document.getElementById('sSec').textContent=sections.length;
+  updateAcSecList();
+  const el=document.getElementById('secList');
+  if(!sections.length){el.innerHTML='<p style="font-size:10px;color:#9ca3af;text-align:center;padding:14px">No sections yet.</p>';return;}
+  let html='';
+  sections.forEach(sec=>{
+    const em=placedModules.find(m=>m.uid===sec.elcbUid);
+    const stag=em&&em.sensitivity?`<span style="font-size:7px;padding:1px 4px;border-radius:2px;background:${em.sensitivity==='30mA'?'#fef3c7':'#dcfce7'};color:${em.sensitivity==='30mA'?'#92400e':'#166534'};font-weight:700">${em.sensitivity}</span>`:'';
+    html+=`<div class="sec-card" style="border-left:4px solid ${sec.color}">
+      <div class="sec-head">
+        <div style="width:9px;height:9px;border-radius:2px;background:${sec.color};flex-shrink:0"></div>
+        <div class="sec-name">${sec.name}</div>
+        ${stag}
+        <button class="btn btn-danger" style="padding:1px 5px;font-size:8px" onclick="removeSection('${sec.id}')">✕</button>
+      </div>
+      <div class="sec-body">`;
+    if(!sec.circuits.length) html+=`<p style="font-size:9px;color:#9ca3af">No circuits.</p>`;
+    sec.circuits.forEach(circ=>{
+      const tag=CTYPE_TAGS[circ.type]||'tag-general';
+      const mods=(circ.poles===3?3:1)+(circ.hasTimer?1:0)+(circ.hasCont?2:0);
+      html+=`<div class="circ-row">
+        <span class="ctag ${tag}">${CTYPE_LABELS[circ.type]||circ.type}</span>
+        <span style="font-size:9px;font-weight:600;color:#1e40af;flex:1">${circ.name}</span>
+        <span style="font-size:8px;color:#374151">${circ.rating}/${circ.poles}P</span>
+        <span style="font-size:7px;color:#6b7280">${mods}mod</span>
+        ${circ.hasTimer?'<span style="font-size:7px;color:#7c3aed;font-weight:700">TMR</span>':''}
+        ${circ.hasCont?'<span style="font-size:7px;color:#db2777;font-weight:700">CTR</span>':''}
+        <button class="btn btn-danger" style="padding:1px 4px;font-size:8px" onclick="removeCircuit('${sec.id}','${circ.id}')">✕</button>
+      </div>`;
+    });
+    html+=`<button class="btn-add-c" onclick="openCircModal('${sec.id}')">+ Add circuit</button>`;
+    html+=`</div></div>`;
+  });
+  el.innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SUMMARY + NOTE
+// ══════════════════════════════════════════════════════════════════════
+function renderSummary(){
+  const used=placedModules.reduce((s,m)=>s+m.span,0);
+  const db=pickDB();
+  document.getElementById('sTot').textContent=used;
+  document.getElementById('sBest').textContent=db.name;
+  document.getElementById('sFree').textContent=Math.max(0,db.total-used);
+  document.getElementById('dbBadge').textContent=db.name;
+}
+function updateNote(){
+  const db=pickDB();
+  const{isoRow,cableRow}=getRows(db);
+  document.getElementById('isoNote').innerHTML=
+    `<b>${db.name}</b> — ${db.total} mod, ${db.rows} rows<br>
+Cable reserve: Row ${cableRow+1} left 4 slots<br>
+ISO row: Row ${isoRow+1} <span style="color:#b91c1c;font-weight:700">← hard reserved (no MCBs here)</span><br>
+NT auto-added right of isolator`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// RENDER ALL
+// ══════════════════════════════════════════════════════════════════════
+function renderAll(){
+  renderLib();
+  updateAcSecList();
+  renderSummary();
+  updateNote();
+  renderDB();
+  renderSections();
+}
+
+// close modals on backdrop click
+['editModal','secModal','circModal','customModal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
+});
+
+// init
+setPhase(3);
+</script>
+<div id="dbToast"></div>
+</body>
+</html>
